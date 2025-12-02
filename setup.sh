@@ -121,84 +121,24 @@ get_domain_input() {
 }
 
 show_vpn_domains_info() {
-    print_step "Шаг 2 из 2: Настройка VPN поддоменов"
+    print_step "Шаг 2 из 2: Информация о Reality трафике"
     
-    echo -e "\n${CYAN}Информация о VPN поддоменах:${NC}"
+    echo -e "\n${CYAN}Информация о Reality конфигурации:${NC}"
     echo "────────────────────────────────────────────"
-    echo "Для работы VPN вам нужно настроить поддомены."
-    echo "Примеры поддоменов для $DOMAIN:"
-    echo "  • vpn1.$DOMAIN"
-    echo "  • vpn2.$DOMAIN"
-    echo "  • server.$DOMAIN"
-    echo "  • proxy.$DOMAIN"
-    echo ""
-    echo "Скрипт создаст для каждого поддомена отдельный VPN порт."
+    echo "Скрипт настроит HAProxy для маршрутизации:"
+    echo "  • Reality трафик (cdnjs.com) → Xray (4443, 5443)"
+    echo "  • Весь остальной трафик → Nginx сайт-заглушка"
     echo ""
     
     echo -e "${YELLOW}ВАЖНО:${NC}"
-    echo "1. Создайте DNS A записи для этих поддоменов"
-    echo "2. После установки настройте VPN сервисы на указанных портах"
+    echo "1. Reality трафик будет определяться по SNI: cdnjs.com"
+    echo "2. Весь остальной HTTPS трафик пойдет на сайт"
+    echo "3. Для работы Xray настройте его на портах 4443 и 5443"
     
-    setup_vpn_domains
-}
-
-setup_vpn_domains() {
-    echo -e "\n${CYAN}Настройка VPN поддоменов:${NC}"
-    
-    # Предлагаем варианты по умолчанию
-    default_vpns=("vpn1.$DOMAIN" "vpn2.$DOMAIN" "vpn3.$DOMAIN")
-    
-    echo -e "\nСкрипт создаст ${GREEN}3 поддомена${NC} по умолчанию:"
-    for vpn in "${default_vpns[@]}"; do
-        echo "  • $vpn"
-    done
-    
-    echo ""
-    read -p "Использовать поддомены по умолчанию? [Y/n]: " use_default
-    
-    if [[ -z "$use_default" ]] || [[ "$use_default" =~ ^[Yy]$ ]]; then
-        VPN_DOMAINS=("${default_vpns[@]}")
-        print_status "Используются поддомены по умолчанию"
-    else
-        get_custom_vpn_domains
-    fi
+    # Просто создаем пустой массив VPN_DOMAINS для совместимости
+    VPN_DOMAINS=("cdnjs.com")
     
     show_domain_summary
-}
-
-get_custom_vpn_domains() {
-    echo -e "\n${CYAN}Введите ваши VPN поддомены:${NC}"
-    echo "(вводите по одному, пустая строка - завершение ввода)"
-    echo ""
-    
-    local count=0
-    while true; do
-        local vpn_number=$((count + 1))
-        read -p "Поддомен #$vpn_number (или Enter для завершения): " vpn_domain
-        
-        if [[ -z "$vpn_domain" ]]; then
-            if [[ $count -eq 0 ]]; then
-                print_error "Нужно указать хотя бы один поддомен!"
-                continue
-            else
-                break
-            fi
-        fi
-        
-        # Проверка формата
-        if [[ ! "$vpn_domain" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]; then
-            print_error "Некорректный формат домена! Пример: vpn1.$DOMAIN"
-            continue
-        fi
-        
-        VPN_DOMAINS+=("$vpn_domain")
-        count=$((count + 1))
-        
-        if [[ $count -ge 10 ]]; then
-            print_warning "Достигнут лимит 10 поддоменов"
-            break
-        fi
-    done
 }
 
 show_domain_summary() {
@@ -207,23 +147,21 @@ show_domain_summary() {
     echo -e "${CYAN}Основной домен (сайт):${NC}"
     echo "  ${GREEN}https://$DOMAIN${NC}"
     
-    echo -e "\n${CYAN}VPN поддомены:${NC}"
-    local i=1
-    for vpn_domain in "${VPN_DOMAINS[@]}"; do
-        local port=$((5442 + i))
-        echo "  $i. $vpn_domain → порт: $port"
-        i=$((i + 1))
-    done
+    echo -e "\n${CYAN}Маршрутизация трафика:${NC}"
+    echo "  • SNI cdnjs.com → Xray Reality (порты 4443, 5443)"
+    echo "  • Весь остальной трафик → Nginx сайт"
     
     echo -e "\n${CYAN}Порты для настройки:${NC}"
     echo "  443  → HAProxy (весь трафик)"
     echo "  8443 → Nginx (сайт)"
     echo "  8404 → Статистика HAProxy"
+    echo "  4443 → Xray Reality (raw)"
+    echo "  5443 → Xray Reality (gRPC)"
     
     echo -e "\n${YELLOW}⚠️  ВАЖНО: Перед установкой убедитесь, что:${NC}"
     echo "1. Домен $DOMAIN указывает на этот сервер"
-    echo "2. Вы готовы создать DNS записи для VPN поддоменов"
-    echo "3. Вы настроите VPN сервисы на указанных портах"
+    echo "2. Xray настроен на портах 4443 и 5443"
+    echo "3. Reality конфигурация использует SNI: cdnjs.com"
     
     echo ""
     read -p "Продолжить установку? [Y/n]: " confirm
@@ -379,9 +317,9 @@ install_static_page() {
     </div>
     
     <div class="info-box">
-        <h3>VPN Gateway Information</h3>
+        <h3>Gateway Information</h3>
         <p><strong>Main Domain:</strong> $DOMAIN</p>
-        <p><strong>VPN Subdomains:</strong></p>
+        <p><strong>Subdomains:</strong></p>
         <ul>
 $(for vpn in "${VPN_DOMAINS[@]}"; do
     echo "            <li>$vpn</li>"
@@ -435,20 +373,12 @@ frontend shared_443
     tcp-request inspect-delay 5s
     tcp-request content accept if { req.ssl_hello_type 1 }
     
-    # ACL для VPN доменов
-$(for domain in "${VPN_DOMAINS[@]}"; do
-    domain_id=$(echo "$domain" | tr '.-' '_')
-    echo "    acl is_${domain_id} req.ssl_sni -i $domain"
-done)
+    # ACL для Reality трафика
+    acl is_reality_traffic req.ssl_sni -i cdnjs.com
     
-    # Маршрутизация VPN трафика
-$(i=1
-for domain in "${VPN_DOMAINS[@]}"; do
-    domain_id=$(echo "$domain" | tr '.-' '_')
-    echo "    use_backend backend_vpn$i if is_${domain_id}"
-    i=$((i+1))
-done)
-    
+    # Маршрутизация Xray трафика
+    use_backend xray_reality if is_reality_traffic  # Reality трафик
+
     # Весь остальной трафик → Nginx (сайт)
     default_backend nginx_site
 
@@ -461,21 +391,12 @@ frontend stats
     stats refresh 30s
     stats auth admin:$STATS_PASSWORD
 
-# Бэкенды для VPN
-$(i=1
-for domain in "${VPN_DOMAINS[@]}"; do
-    port=$((5442 + i))
-    cat << BACKEND
-backend backend_vpn$i
+# Бэкенд для Xray
+backend xray_reality
     mode tcp
-    balance leastconn
-    option tcp-check
-    timeout server 30m
-    timeout connect 5s
-    server vpn_backend$i 127.0.0.1:$port check
-BACKEND
-    i=$((i+1))
-done)
+    balance roundrobin
+    server xray_raw 127.0.0.1:4443 check
+    server xray_grpc 127.0.0.1:5443 check
 
 # Бэкенд для Nginx (сайт)
 backend nginx_site
@@ -664,32 +585,21 @@ show_post_install_info() {
     echo "   • $DOMAIN → $server_ip"
     echo "   • www.$DOMAIN → $server_ip"
     
-    local i=1
-    for vpn_domain in "${VPN_DOMAINS[@]}"; do
-        echo "   • $vpn_domain → $server_ip"
-        i=$((i + 1))
-    done
+    echo -e "\n${CYAN}2. НАСТРОЙТЕ XRAY REALITY:${NC}"
+    echo "   Настройте Xray сервер на этом же сервере:"
+    echo "   • Порт для raw протокола: ${GREEN}4443${NC}"
+    echo "   • Порт для gRPC протокола: ${GREEN}5443${NC}"
+    echo "   • SNI в Reality конфигурации: ${GREEN}cdnjs.com${NC}"
     
-    echo -e "\n${CYAN}2. НАСТРОЙТЕ VPN СЕРВИСЫ:${NC}"
-    echo "   Каждому VPN поддомену соответствует порт:"
-    i=1
-    for vpn_domain in "${VPN_DOMAINS[@]}"; do
-        local port=$((5442 + i))
-        echo "   • $vpn_domain → настройте VPN на порту $port"
-        i=$((i + 1))
-    done
-    
-    echo -e "\n${CYAN}3. ИЗМЕНИТЕ ПОДДОМЕНЫ В КОНФИГУРАЦИИ (ЕСЛИ НУЖНО):${NC}"
+    echo -e "\n${CYAN}3. ИЗМЕНИТЕ SNI В КОНФИГУРАЦИИ (ЕСЛИ НУЖНО):${NC}"
     echo "   Файл: ${YELLOW}/etc/haproxy/haproxy.cfg${NC}"
-    echo "   Найдите строки с 'acl is_' и измените поддомены"
-    echo "   Пример изменения:"
-    echo "   Было: acl is_vpn1_your_domain_com req.ssl_sni -i vpn1.your-domain.com"
-    echo "   Стало: acl is_my_real_vpn_domain req.ssl_sni -i real-vpn.domain.com"
+    echo "   Найдите строку: 'acl is_reality_traffic req.ssl_sni -i cdnjs.com'"
+    echo "   Измените 'cdnjs.com' на нужный вам SNI"
     
     echo -e "\n${CYAN}4. ПРОВЕРЬТЕ РАБОТУ:${NC}"
     echo "   • Сайт: https://$DOMAIN"
     echo "   • Статистика: http://$server_ip:8404/stats"
-    echo "   • VPN: подключитесь через клиент к вашему поддомену"
+    echo "   • Xray Reality: подключитесь через клиент"
     
     echo -e "\n${CYAN}5. КОНФИГУРАЦИОННЫЕ ФАЙЛЫ:${NC}"
     echo "   • HAProxy: /etc/haproxy/haproxy.cfg"
@@ -703,16 +613,15 @@ show_post_install_info() {
     echo "   sudo haproxy -c -f /etc/haproxy/haproxy.cfg # Проверка HAProxy"
     
     echo -e "\n${RED}⚠️  ВАЖНОЕ ЗАМЕЧАНИЕ:${NC}"
-    echo "Если вы использовали временные поддомены (vpn1.$DOMAIN и т.д.),"
-    echo "ОБЯЗАТЕЛЬНО замените их на реальные в конфигурации HAProxy!"
-    echo "Файл для редактирования: ${YELLOW}/etc/haproxy/haproxy.cfg${NC}"
+    echo "HAProxy настроен на маршрутизацию по SNI:"
+    echo "  • cdnjs.com → Xray порты 4443/5443"
+    echo "  • Все остальное → Nginx сайт"
+    echo "Если нужно изменить SNI для Reality, отредактируйте конфиг HAProxy"
     
     echo -e "\n${GREEN}🎯 СХЕМА РАБОТЫ:${NC}"
     echo "   Клиенты → Порт 443 → HAProxy →"
-    echo "     • Если поддомен из списка VPN → соответствующий порт (5443+)"
-    echo "     • Если другой домен → Nginx (8443) → сайт-заглушка"
-    
-    echo -e "\n${YELLOW}⏰ Примерное время настройки DNS: 5-30 минут${NC}"
+    echo "     • Если SNI = cdnjs.com → Xray (4443/5443)"
+    echo "     • Если другой SNI → Nginx (8443) → сайт-заглушка"
     
     echo -e "\n────────────────────────────────────────────"
     print_status "Установка завершена успешно!"
