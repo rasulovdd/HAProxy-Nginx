@@ -1,0 +1,153 @@
+{
+  "log": {
+    "error": "/var/log/remnanode/error.log",
+    "access": "/var/log/remnanode/access.log",
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "tag": "sni-cdnjc",
+      "port": 4443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [],
+        "decryption": "none"
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "xver": 0,
+          "target": "cdnjs.com:443",
+          "spiderX": "/",
+          "shortIds": [
+            "6676289044ec157a"
+          ],
+          "publicKey": "X0ZJv35iAh9sDZ1CFqgcg3",
+          "privateKey": "5Gh6lLzMCj5b1qybtdluY",
+          "fingerprint": "random",
+          "serverNames": [
+            "cdnjs.com"
+          ]
+        }
+      }
+    },
+    {
+      "tag": "sni-cdnjc-grpc",
+      "port": 5443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [],
+        "decryption": "none"
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ]
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "xver": 0,
+          "target": "cdnjs.com:443",
+          "spiderX": "/",
+          "shortIds": [
+            "6676289044ec157a"
+          ],
+          "publicKey": "X0ZJv3zsGPmxH1ONaDyac2MJqQM",
+          "privateKey": "5Gh6lLzMCj55gXsg",
+          "fingerprint": "random",
+          "serverNames": [
+            "cdnjs.com"
+          ]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "tag": "DIRECT",
+      "protocol": "freedom"
+    },
+    {
+      "tag": "BLOCK",
+      "protocol": "blackhole"
+    },
+    {
+      "tag": "TORRENT",
+      "protocol": "blackhole"
+    },
+    {
+      "tag": "RU-YT",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "port": 443,
+            "users": [
+              {
+                "id": "77035e7b-b084-49ac-",
+                "flow": "xtls-rprx-vision",
+                "encryption": "none"
+              }
+            ],
+            "address": "yt.domen.ru"
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "shortId": "6676289044ec157a",
+          "spiderX": "/",
+          "publicKey": "X0ZJv35iAh9sDZ1CFqgcg3z",
+          "serverName": "yt.domen.ru",
+          "fingerprint": "random"
+        }
+      }
+    }
+  ],
+  "routing": {
+    "rules": [
+      {
+        "ip": [
+          "geoip:private"
+        ],
+        "outboundTag": "BLOCK"
+      },
+      {
+        "type": "field",
+        "protocol": [
+          "bittorrent"
+        ],
+        "outboundTag": "TORRENT"
+      },
+      {
+        "domain": [
+          "geosite:youtube",
+          "geosite:category-ru"
+        ],
+        "inboundTag": [
+          "sni-cdnjc",
+          "sni-cdnjc-grpc"
+        ],
+        "outboundTag": "RU-YT"
+      }
+    ]
+  }
+}
