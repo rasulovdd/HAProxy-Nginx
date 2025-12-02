@@ -452,6 +452,15 @@ done)
     # Весь остальной трафик → Nginx (сайт)
     default_backend nginx_site
 
+# Статистика HAProxy
+frontend stats
+    bind *:8404
+    mode http
+    stats enable
+    stats uri /stats
+    stats refresh 30s
+    stats auth admin:$STATS_PASSWORD
+
 # Бэкенды для VPN
 $(i=1
 for domain in "${VPN_DOMAINS[@]}"; do
@@ -475,15 +484,6 @@ backend nginx_site
     timeout server 30s
     server nginx_local 127.0.0.1:8443 send-proxy-v2 check
 
-# Статистика HAProxy
-listen stats
-    bind :8404
-    stats enable
-    stats uri /stats
-    stats refresh 30s
-    stats admin if TRUE
-    stats hide-version
-    stats auth admin:$STATS_PASSWORD
 EOF
     
     print_status "Конфигурация HAProxy создана"
@@ -581,24 +581,24 @@ server {
 }
 
 # Резервный сервер (если HAProxy отключен)
-server {
-    listen 443 ssl http2;
-    server_name $DOMAIN www.$DOMAIN;
-    
-    ssl_certificate $ssl_cert;
-    ssl_certificate_key $ssl_key;
-    
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers on;
-    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305';
-    
-    root /var/www/html/static_page;
-    index index.html;
-    
-    location / {
-        try_files \$uri \$uri/ =404;
-    }
-}
+#server {
+#    listen 443 ssl http2;
+#    server_name $DOMAIN www.$DOMAIN;
+#    
+#    ssl_certificate $ssl_cert;
+#    ssl_certificate_key $ssl_key;
+#    
+#    ssl_protocols TLSv1.2 TLSv1.3;
+#    ssl_prefer_server_ciphers on;
+#    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305';
+#    
+#    root /var/www/html/static_page;
+#    index index.html;
+#    
+#    location / {
+#        try_files \$uri \$uri/ =404;
+#    }
+#}
 EOF
     
     print_status "Конфигурация Nginx создана"
